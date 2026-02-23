@@ -7,7 +7,7 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
 REMARKED_TOKEN = os.environ.get("REMARKED_TOKEN")
-REMARKED_API_URL = "https://app.remarked.ru/api/v1/api"
+REMARKED_API_URL = os.environ.get("REMARKED_API_URL", "https://app.remarked.ru/api/v1/api")
 SECRET_KEY = os.environ.get("SECRET_KEY")
 
 # Маппинг: отслеживаемый номер -> ID точки ReMarked
