@@ -7,7 +7,7 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
 REMARKED_TOKEN = os.environ.get("REMARKED_TOKEN")
-REMARKED_API_URL = os.environ.get("REMARKED_API_URL", "https://app.remarked.ru/api/v1/api")
+REMARKED_API_URL = "https://app.remarked.ru/api/v1/api"
 SECRET_KEY = os.environ.get("SECRET_KEY")
 
 # Маппинг: отслеживаемый номер -> ID точки ReMarked
@@ -146,13 +146,18 @@ def update_guest_comment(guest_id, new_comment, existing_comment):
     return result and result.get("result", {}).get("status") == "ok"
 
 
-@app.route("/webhook", methods=["POST"])
+@app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     secret = request.args.get("secret", "")
     if SECRET_KEY and secret != SECRET_KEY:
         return jsonify({"error": "Unauthorized"}), 403
 
+    if request.method == "GET":
+        return jsonify({"status": "ok"}), 200
+
     data = request.form.to_dict()
+    if not data:
+        data = request.get_json(force=True, silent=True) or {}
     logging.info(f"Received webhook: {data}")
 
     callerphone = data.get("callerphone", "").strip()
