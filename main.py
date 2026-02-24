@@ -131,6 +131,10 @@ def update_guest(guest_id, new_comment, existing_comment):
 def health():
     return jsonify({"status": "ok"}), 200
 
+@app.route("/ping", methods=["GET", "POST"])
+def ping():
+    return jsonify({"status": "ok"}), 200
+
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
