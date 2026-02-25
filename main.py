@@ -86,7 +86,11 @@ def remarked_request(method, params):
     }
     response = requests.post(REMARKED_API_URL, json=payload, timeout=10)
     response.raise_for_status()
-    return response.json()
+    try:
+        return response.json()
+    except Exception:
+        logging.warning("Non-JSON response: %s", response.text[:200])
+        return None
 
 
 def find_guest(phone, point_id=None):
@@ -94,10 +98,19 @@ def find_guest(phone, point_id=None):
     if point_id:
         params["point"] = point_id
     result = remarked_request("GuestsApi.GetGuestsData", params)
-    if result and result.get("result", {}).get("status") == "ok":
-        data = result["result"].get("data", [])
-        if data:
-            return data[0]
+    if not result:
+        return None
+    # ReMarked может вернуть как словарь так и список
+    if isinstance(result, list):
+        return result[0] if result else None
+    if isinstance(result, dict):
+        res = result.get("result", {})
+        if isinstance(res, dict) and res.get("status") == "ok":
+            data = res.get("data", [])
+            if data:
+                return data[0]
+        elif isinstance(res, list) and res:
+            return res[0]
     return None
 
 
@@ -131,6 +144,7 @@ def update_guest(guest_id, new_comment, existing_comment):
 def health():
     return jsonify({"status": "ok"}), 200
 
+
 @app.route("/ping", methods=["GET", "POST"])
 def ping():
     return jsonify({"status": "ok"}), 200
@@ -155,6 +169,7 @@ def webhook():
     source = request.form.get("source", "").strip()
 
     logging.info("callerphone=%s phonenumber=%s source=%s utm_source=%s", callerphone, phonenumber, source, utm_source)
+    logging.info("ALL form data: %s", dict(request.form))
 
     if not callerphone:
         logging.warning("No callerphone, skipping")
