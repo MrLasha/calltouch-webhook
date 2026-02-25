@@ -7,7 +7,8 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
 REMARKED_TOKEN = os.environ.get("REMARKED_TOKEN")
-REMARKED_API_URL = os.environ.get("https://app.remarked.ru/api/v1/api")
+REMARKED_API_URL = os.environ.get("REMARKED_API_URL", "https://app.remarked.ru/api/v1/api")
+SECRET_KEY = os.environ.get("SECRET_KEY")
 
 PHONE_TO_POINT = {
     "74992832368": 253301,
@@ -24,7 +25,6 @@ PHONE_TO_POINT = {
     "74992831831": 253301,
     "74992831219": 253301,
     "74992260409": 253301,
-
     "78122230106": 253303,
     "78122209014": 253303,
     "78122204186": 253303,
@@ -42,24 +42,9 @@ PHONE_TO_POINT = {
 }
 
 
-def clean_phone(phone: str) -> str:
-    if not phone:
-        return ""
-    return (
-        phone.replace("+", "")
-        .replace(" ", "")
-        .replace("-", "")
-        .replace("(", "")
-        .replace(")", "")
-    )
-
-
 def get_point_id(phonenumber):
-    clean = clean_phone(phonenumber)
+    clean = phonenumber.replace("+", "").replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
     return PHONE_TO_POINT.get(clean)
-
-
-# --------------------------------------------------
 
 
 def get_source_label(utm_source, medium, source):
@@ -89,11 +74,7 @@ def get_source_label(utm_source, medium, source):
         return src
     if med and med not in ("offline", "(none)", ""):
         return med
-
     return "Прямой звонок"
-
-
-# --------------------------------------------------
 
 
 def remarked_request(method, params):
@@ -103,275 +84,113 @@ def remarked_request(method, params):
         "method": method,
         "params": params
     }
-
-    response = requests.post(
-        REMARKED_API_URL,
-        json=payload,
-        timeout=15
-    )
-
-    logging.info("ReMarked status=%s", response.status_code)
-    logging.info("ReMarked raw=%s", response.text)
-
+    response = requests.post(REMARKED_API_URL, json=payload, timeout=10)
     response.raise_for_status()
-
-    data = response.json()
-
-    logging.info("ReMarked json=%s", data)
-
-    return data
-
-
-# --------------------------------------------------
-
-
-def normalize_result(result):
-
-    if isinstance(result, list):
-        return result[0] if result else {}
-
-    if isinstance(result, dict):
-        return result
-
-    return {}
-
-
-# --------------------------------------------------
+    return response.json()
 
 
 def find_guest(phone, point_id=None):
-
-    params = {
-        "token": REMARKED_TOKEN,
-        "phone": phone
-    }
-
+    params = {"token": REMARKED_TOKEN, "phone": phone}
     if point_id:
         params["point"] = point_id
-
-    result = remarked_request(
-        "GuestsApi.GetGuestsData",
-        params
-    )
-
-    result = normalize_result(result)
-
-    if result.get("result", {}).get("status") == "ok":
-
+    result = remarked_request("GuestsApi.GetGuestsData", params)
+    if result and result.get("result", {}).get("status") == "ok":
         data = result["result"].get("data", [])
-
         if data:
             return data[0]
-
     return None
-
-
-# --------------------------------------------------
 
 
 def create_guest(phone, comment, point_id=None):
-
     params = {
         "token": REMARKED_TOKEN,
-        "fields": {
-            "phone": phone,
-            "comment": comment
-        }
+        "fields": {"phone": phone, "comment": comment}
     }
-
     if point_id:
         params["point"] = point_id
-
-    result = remarked_request(
-        "GuestsApi.CreateGuest",
-        params
-    )
-
-    result = normalize_result(result)
-
-    if result.get("result", {}).get("status") == "ok":
+    result = remarked_request("GuestsApi.CreateGuest", params)
+    if result and result.get("result", {}).get("status") == "ok":
         return result["result"].get("gid")
-
     return None
 
 
-# --------------------------------------------------
-
-
 def update_guest(guest_id, new_comment, existing_comment):
-
     if existing_comment:
         combined = existing_comment + "\n" + new_comment
     else:
         combined = new_comment
-
     params = {
         "token": REMARKED_TOKEN,
         "id": guest_id,
-        "fields": {
-            "comment": combined
-        }
+        "fields": {"comment": combined}
     }
-
     remarked_request("GuestsApi.UpdateGuest", params)
-
-
-# --------------------------------------------------
 
 
 @app.route("/", methods=["GET"])
 def health():
     return jsonify({"status": "ok"}), 200
 
-
 @app.route("/ping", methods=["GET", "POST"])
 def ping():
     return jsonify({"status": "ok"}), 200
 
 
-# --------------------------------------------------
-
-
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
-
-    # Логируем ВСЁ, что пришло
-    logging.info("FULL FORM: %s", dict(request.form))
-
     secret = request.args.get("secret", "")
-
     if SECRET_KEY and secret != SECRET_KEY:
         return jsonify({"error": "Unauthorized"}), 403
 
     if request.method == "GET":
         return jsonify({"status": "ok"}), 200
 
-    # Номер клиента
     callerphone = request.form.get("callerphone", "").strip()
-
-    # Номер точки (главное исправление)
-    phonenumber = (
-        request.form.get("redirectNumber", "").strip()
-        or request.form.get("phonenumber", "").strip()
-    )
-
+    phonenumber = request.form.get("phonenumber", "").strip()
     calltime = request.form.get("calltime", "").strip()
     status = request.form.get("status", "").strip()
     unique = request.form.get("unique", "").strip()
-
     utm_source = request.form.get("utm_source", "").strip()
     medium = request.form.get("medium", "").strip()
     source = request.form.get("source", "").strip()
 
-    logging.info(
-        "callerphone=%s target_number=%s source=%s utm=%s",
-        callerphone,
-        phonenumber,
-        source,
-        utm_source
-    )
+    logging.info("callerphone=%s phonenumber=%s source=%s utm_source=%s", callerphone, phonenumber, source, utm_source)
 
     if not callerphone:
-        logging.warning("No callerphone, skip")
+        logging.warning("No callerphone, skipping")
         return jsonify({"status": "skip"}), 200
 
-
-    # Форматируем номер клиента
     if not callerphone.startswith("+"):
         phone_formatted = "+" + callerphone
     else:
         phone_formatted = callerphone
 
-
     point_id = get_point_id(phonenumber)
-
-    logging.info("POINT_ID=%s", point_id)
-
-
-    source_label = get_source_label(
-        utm_source,
-        medium,
-        source
-    )
-
+    source_label = get_source_label(utm_source, medium, source)
     call_date = calltime[:16] if len(calltime) >= 16 else calltime
-
     status_ru = "Целевой" if status == "successful" else "Нецелевой"
-
     unique_ru = "Уникальный" if unique == "true" else "Повторный"
 
+    comment = "Звонок " + call_date + " | " + source_label + " | " + status_ru + " | " + unique_ru
 
-    comment = (
-        "Звонок "
-        + call_date
-        + " | "
-        + source_label
-        + " | "
-        + status_ru
-        + " | "
-        + unique_ru
-    )
-
-    logging.info("COMMENT=%s", comment)
-
+    logging.info("comment=%s point_id=%s", comment, point_id)
 
     try:
-
         guest = find_guest(phone_formatted, point_id)
-
         if guest:
-
             existing = guest.get("comment", "") or ""
-
-            update_guest(
-                guest["id"],
-                comment,
-                existing
-            )
-
-            logging.info(
-                "Updated guest id=%s",
-                guest["id"]
-            )
-
+            update_guest(guest["id"], comment, existing)
+            logging.info("Updated guest id=%s", guest["id"])
         else:
-
-            gid = create_guest(
-                phone_formatted,
-                comment,
-                point_id
-            )
-
-            logging.info(
-                "Created guest id=%s",
-                gid
-            )
-
+            gid = create_guest(phone_formatted, comment, point_id)
+            logging.info("Created guest id=%s", gid)
     except Exception as e:
-
-        logging.error(
-            "ReMarked error: %s",
-            str(e),
-            exc_info=True
-        )
-
-        return jsonify({
-            "status": "error",
-            "message": str(e)
-        }), 200
-
+        logging.error("Error working with ReMarked: %s", str(e))
+        return jsonify({"status": "error", "message": str(e)}), 200
 
     return jsonify({"status": "ok"}), 200
 
 
-# --------------------------------------------------
-
-
 if __name__ == "__main__":
-
     port = int(os.environ.get("PORT", 5000))
-
-    app.run(
-        host="0.0.0.0",
-        port=port
-    )
+    app.run(host="0.0.0.0", port=port)
