@@ -84,7 +84,12 @@ def remarked_request(method, params):
         "method": method,
         "params": params
     }
-    response = requests.post(REMARKED_API_URL, json=payload, timeout=10)
+    headers = {
+        "Authorization": "Bearer " + (REMARKED_TOKEN or ""),
+        "Content-Type": "application/json"
+    }
+    response = requests.post(REMARKED_API_URL, json=payload, headers=headers, timeout=10)
+    logging.info("ReMarked response status: %s body: %s", response.status_code, response.text[:300])
     response.raise_for_status()
     try:
         return response.json()
