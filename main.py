@@ -1,3 +1,6 @@
+Main · PY
+Copy
+
 import os
 import logging
 import requests
@@ -100,7 +103,6 @@ def find_guest(phone, point_id=None):
     result = remarked_request("GuestsApi.GetGuestsData", params)
     if not result:
         return None
-    # ReMarked может вернуть как словарь так и список
     if isinstance(result, list):
         return result[0] if result else None
     if isinstance(result, dict):
@@ -122,8 +124,12 @@ def create_guest(phone, comment, point_id=None):
     if point_id:
         params["point"] = point_id
     result = remarked_request("GuestsApi.CreateGuest", params)
-    if result and result.get("result", {}).get("status") == "ok":
-        return result["result"].get("gid")
+    if not result:
+        return None
+    if isinstance(result, dict):
+        res = result.get("result", {})
+        if isinstance(res, dict) and res.get("status") == "ok":
+            return res.get("gid")
     return None
 
 
