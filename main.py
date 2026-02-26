@@ -58,6 +58,8 @@ def get_source_label(utm_source, medium, source):
         return utm_source
     if "2гис" in utm:
         return utm_source
+    if utm in ("2gismap", "2gis"):
+        return "2ГИС"
     if "yadir" in utm or "yadir" in src or med == "cpc":
         return "Яндекс Директ"
     if "сайт" in utm:
