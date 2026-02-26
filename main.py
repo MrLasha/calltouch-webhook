@@ -105,16 +105,24 @@ def find_guest(phone, point_id=None):
     result = remarked_request("GuestsApi.GetGuestsData", params)
     if not result:
         return None
-    if isinstance(result, list):
-        return result[0] if result else None
-    if isinstance(result, dict):
-        res = result.get("result", {})
-        if isinstance(res, dict) and res.get("status") == "ok":
+    res = result.get("result")
+    if not res:
+        return None
+    # Формат 1: result - список [{...}, ...]
+    if isinstance(res, list):
+        return res[0] if res else None
+    # Формат 2: result - словарь с status/data
+    if isinstance(res, dict):
+        # Формат 2a: {"status": "ok", "data": [...]}
+        if "status" in res:
             data = res.get("data", [])
-            if data:
+            if isinstance(data, list) and data:
                 return data[0]
-        elif isinstance(res, list) and res:
-            return res[0]
+            return None
+        # Формат 2b: {"62527798": {"id": 62527798, ...}} - ключи это ID гостей
+        values = list(res.values())
+        if values and isinstance(values[0], dict) and "id" in values[0]:
+            return values[0]
     return None
 
 
