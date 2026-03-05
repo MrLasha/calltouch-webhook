@@ -110,18 +110,14 @@ def find_guest(phone, point_id=None):
     res = result.get("result")
     if not res:
         return None
-    # Формат 1: result - список [{...}, ...]
     if isinstance(res, list):
         return res[0] if res else None
-    # Формат 2: result - словарь с status/data
     if isinstance(res, dict):
-        # Формат 2a: {"status": "ok", "data": [...]}
         if "status" in res:
             data = res.get("data", [])
             if isinstance(data, list) and data:
                 return data[0]
             return None
-        # Формат 2b: {"62527798": {"id": 62527798, ...}} - ключи это ID гостей
         values = list(res.values())
         if values and isinstance(values[0], dict) and "id" in values[0]:
             return values[0]
@@ -133,6 +129,8 @@ def create_guest(phone, comment, point_id=None):
         "token": REMARKED_TOKEN,
         "fields": {"phone": phone, "comment": comment}
     }
+    if point_id:
+        params["point"] = point_id
     result = remarked_request("GuestsApi.CreateGuest", params)
     if not result:
         return None
@@ -224,4 +222,4 @@ def webhook():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port
+    app.run(host="0.0.0.0", port=port)
