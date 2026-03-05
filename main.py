@@ -133,8 +133,6 @@ def create_guest(phone, comment, point_id=None):
         "token": REMARKED_TOKEN,
         "fields": {"phone": phone, "comment": comment}
     }
-    if point_id:
-        params["point"] = point_id
     result = remarked_request("GuestsApi.CreateGuest", params)
     if not result:
         return None
@@ -189,8 +187,8 @@ def webhook():
     logging.info("callerphone=%s phonenumber=%s source=%s utm_source=%s", callerphone, phonenumber, source, utm_source)
     logging.info("ALL form data: %s", dict(request.form))
 
-    if not callerphone:
-        logging.warning("No callerphone, skipping")
+    if not callerphone or "{" in callerphone:
+        logging.warning("No callerphone or test request, skipping")
         return jsonify({"status": "skip"}), 200
 
     if not callerphone.startswith("+"):
@@ -226,4 +224,4 @@ def webhook():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port
